@@ -1,20 +1,20 @@
 
-# -*- coding: UTF-8 -*-                                                                                                                                                
-#   Copyright 2018-2019 Martijn van Maurik                                                                                                                             
-#                                                                                                                                                                      
-# Licensed under the Apache License, Version 2.0 (the "License");                                                                                                      
-# you may not use this file except in compliance with the License.                                                                                                     
-# You may obtain a copy of the License at                                                                                                                              
-#                                                                                                                                                                      
-# http://www.apache.org/licenses/LICENSE-2.0                                                                                                                           
-#                                                                                                                                                                      
-# Unless required by applicable law or agreed to in writing, software                                                                                                  
-# distributed under the License is distributed on an "AS IS" BASIS,                                                                                                    
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.                                                                                             
-# See the License for the specific language governing permissions and                                                                                                  
-# limitations under the License.                                                                                                                                       
+# -*- coding: UTF-8 -*-
+#   Copyright 2018-2019 Martijn van Maurik
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-import sys, socket, re
+import sys, socket, re, os
 
 from fuglu.shared import ScannerPlugin, DUNNO, DEFER, REJECT
 from IPy import IP
@@ -139,6 +139,7 @@ class RBLSearch(object):
 """
 class RBLLookupPlugin(ScannerPlugin):
     _RBLS = None
+    _loadtime = None
 
     def __init__(self,config,section=None):
         ScannerPlugin.__init__(self,config,section)
@@ -149,17 +150,24 @@ class RBLLookupPlugin(ScannerPlugin):
             },
         }
 
+    def get_time_stamp(self, filename):
+        if not os.path.isfile(filename):
+            self.logger().error('Could not open %s' % (filename))
+            return False
+        statinfo = os.stat(filename)
+        return statinfo.st_ctime
+
     @property
     def RBLS(self):
-        if self._RBLS is None:
+        rbllist = self.config.get(self.section, 'rbllist')
+        if self._RBLS is None or self.get_time_stamp(rbllist) > self._loadtime:
+            self._loadtime = self.get_time_stamp(rbllist)
             self._RBLS = []
-            rbllist = self.config.get(self.section, 'rbllist')
             with open(rbllist) as handle:
                 RBLS = handle.read().splitlines(False)
                 for rbl in RBLS:
                     if not rbl.startswith('#'):
                         self._RBLS.append(rbl)
-
         return self._RBLS
 
     @property
@@ -171,7 +179,7 @@ class RBLLookupPlugin(ScannerPlugin):
             if suspect.clientinfo:
                 helo, ip, revdns = suspect.clientinfo
             else:
-                ip = '205.185.125.157'
+                ip = ''
 
             if len(ip) > 1:
                 pat = re.compile("\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}")
